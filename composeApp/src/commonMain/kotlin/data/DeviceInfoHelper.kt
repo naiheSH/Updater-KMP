@@ -16,7 +16,7 @@ object DeviceInfoHelper {
     @Serializable
     data class RemoteDevices(
         val devices: List<Device>,
-        val version: String,
+        val version: String = "1.0",
     )
 
     data class Android(
