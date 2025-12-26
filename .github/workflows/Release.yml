@@ -29,7 +29,7 @@ jobs:
             artifact-path: composeApp/build/compose/binaries/main-release/app
             artifact-pathEx: composeApp/build/outputs/apk/release
             artifact-name: Updater-linux-x64-bin
-            artifact-nameEx: Updater-*-release.apk
+            artifact-nameEx: Updater-android-release-apk
             jdk-distribution: zulu
           - os: ubuntu-24.04-arm
             platform: linux arm64
@@ -117,7 +117,7 @@ jobs:
           mkdir -p ./release-assets
           
           # Android APK
-          cp ./artifacts/Updater-*-release.apk/*.apk ./release-assets/Updater-android-universal-apk.apk
+          cp ./artifacts/Updater-android-release-apk/*.apk ./release-assets/Updater-android-universal-apk.apk
           
           # Linux x64 - zip
           cd ./artifacts/Updater-linux-x64-bin && zip -r ../../release-assets/Updater-linux-x64-bin.zip . && cd ../..
