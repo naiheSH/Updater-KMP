@@ -3,7 +3,7 @@ package platform
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
-import top.yukonga.updater.kmp.AndroidAppContext
+import top.naihe.yukonga.updater.kmp.AndroidAppContext
 
 @SuppressLint("StaticFieldLeak")
 private val context = AndroidAppContext.getApplicationContext()

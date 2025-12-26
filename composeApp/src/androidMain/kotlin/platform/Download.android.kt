@@ -4,7 +4,7 @@ import android.app.DownloadManager
 import android.content.Context
 import android.os.Environment
 import androidx.core.net.toUri
-import top.yukonga.updater.kmp.AndroidAppContext
+import top.naihe.yukonga.updater.kmp.AndroidAppContext
 
 actual fun downloadToLocal(url: String, fileName: String) {
     val request = DownloadManager.Request(url.toUri()).apply {

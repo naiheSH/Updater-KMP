@@ -105,7 +105,7 @@ fun AboutDialog(
                 ),
                 modifier = Modifier.clickable(
                     onClick = {
-                        uriHandler.openUri("https://github.com/YuKongA/Updater-KMP")
+                        uriHandler.openUri("https://github.com/naiheSH/Updater-KMP")
                     }
                 )
             )

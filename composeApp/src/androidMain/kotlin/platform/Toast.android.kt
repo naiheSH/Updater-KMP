@@ -1,7 +1,7 @@
 package platform
 
 import android.widget.Toast
-import top.yukonga.updater.kmp.AndroidAppContext
+import top.naihe.yukonga.updater.kmp.AndroidAppContext
 
 private var lastToast: Toast? = null
 
