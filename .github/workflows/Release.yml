@@ -1,4 +1,4 @@
-name: Full Auto Release
+name: Release
 
 on:
   push:
@@ -8,126 +8,142 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   build:
-    name: Build All Platforms
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ macos-latest, ubuntu-latest, ubuntu-24.04, windows-latest ]
         include:
-          # ---------- Android ----------
-          - os: ubuntu-latest
-            name: android
-            build: ./gradlew assembleRelease
-            artifact: android
-
           # ---------- macOS arm64 ----------
           - os: macos-latest
-            name: macos-arm64
-            build: ./gradlew packageDmgNativeReleaseMacosArm64
-            artifact: macos-arm64
+            platform: macos arm64
+            build-command: ./gradlew packageDmgNativeReleaseMacosArm64
+            artifact-path: composeApp/build/compose/binaries/main/native-macosArm64-release-dmg
+            artifact-name: Updater-darwin-arm64-dmg
+            jdk-distribution: zulu
 
           # ---------- macOS x64 ----------
           - os: macos-latest
-            name: macos-x64
-            build: ./gradlew packageDmgNativeReleaseMacosX64
-            artifact: macos-x64
+            platform: macos x64
+            build-command: ./gradlew packageDmgNativeReleaseMacosX64
+            artifact-path: composeApp/build/compose/binaries/main/native-macosX64-release-dmg
+            artifact-name: Updater-darwin-x64-dmg
+            jdk-distribution: zulu
 
-          # ---------- iOS ----------
-          - os: macos-latest
-            name: ios
-            build: ./gradlew assembleReleaseIosArm64
-            artifact: ios
-
-          # ---------- Linux x64 ----------
+          # ---------- Linux x64 + Android ----------
           - os: ubuntu-latest
-            name: linux-x64
-            build: ./gradlew createReleaseDistributable
-            artifact: linux-x64
+            platform: linux x64
+            platformEx: android
+            build-command: ./gradlew createReleaseDistributable
+            build-commandEx: ./gradlew assembleRelease
+            artifact-path: composeApp/build/compose/binaries/main-release/app/Updater
+            artifact-pathEx: composeApp/build/outputs/apk/release/*.apk
+            artifact-name: Updater-linux-x64-bin
+            artifact-nameEx: Updater-android-universal-apk
+            jdk-distribution: zulu
 
           # ---------- Linux arm64 ----------
           - os: ubuntu-24.04
-            name: linux-arm64
-            build: ./gradlew createReleaseDistributable
-            artifact: linux-arm64
+            platform: linux arm64
+            build-command: ./gradlew createReleaseDistributable
+            artifact-path: composeApp/build/compose/binaries/main-release/app/Updater
+            artifact-name: Updater-linux-arm64-bin
+            jdk-distribution: zulu
 
           # ---------- Windows ----------
           - os: windows-latest
-            name: windows
-            build: ./gradlew createReleaseDistributable
-            artifact: windows
-
-    runs-on: ${{ matrix.os }}
+            platform: windows x64
+            build-command: ./gradlew createReleaseDistributable
+            artifact-path: composeApp/build/compose/binaries/main-release/app/Updater
+            artifact-name: Updater-windows-x64-exe
+            jdk-distribution: zulu
 
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout sources
+        uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v5
+      - name: Setup JDK
+        uses: actions/setup-java@v5
         with:
-          distribution: zulu
+          distribution: ${{ matrix.jdk-distribution }}
           java-version: '21'
 
-      - uses: gradle/actions/setup-gradle@v5
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
 
-      - name: Decode Android keystore
-        if: matrix.name == 'android'
-        run: echo "${{ secrets.SIGNING_KEY }}" | base64 -d > keystore.jks
+      # ✅ 修复点：keystore 放到 composeApp 目录
+      - name: Decode android signing key
+        if: matrix.platformEx == 'android'
+        run: echo "${{ secrets.SIGNING_KEY }}" | base64 -d > composeApp/keystore.jks
 
-      - name: Build ${{ matrix.name }}
-        run: ${{ matrix.build }}
+      - name: Build ${{ matrix.platform }}
+        run: ${{ matrix.build-command }}
+
+      - name: Build Android
+        if: matrix.platformEx == 'android'
+        run: ${{ matrix.build-commandEx }}
         env:
-          KEYSTORE_PATH: keystore.jks
+          KEYSTORE_PATH: composeApp/keystore.jks
           KEYSTORE_PASS: ${{ secrets.KEY_STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      - name: Upload artifact
+      - name: Upload ${{ matrix.platform }} artifact
         uses: actions/upload-artifact@v5
         with:
-          name: ${{ matrix.artifact }}
-          path: |
-            composeApp/build/**
-            **/*.apk
-            **/*.dmg
-            **/*.ipa
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+
+      - name: Upload Android artifact
+        if: matrix.platformEx == 'android'
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.artifact-nameEx }}
+          path: ${{ matrix.artifact-pathEx }}
 
   release:
-    name: Publish Release
+    name: Auto Release
     needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/download-artifact@v5
+      - name: Download all artifacts
+        uses: actions/download-artifact@v5
         with:
           path: artifacts
 
-      - name: Prepare files
+      - name: Prepare Release files
         run: |
           mkdir release
 
-          cp artifacts/android/**/*.apk \
+          # Android
+          cp artifacts/Updater-android-universal-apk/*.apk \
             release/Updater-android-universal-apk.apk
 
-          cp artifacts/macos-arm64/**/*.dmg \
+          # macOS
+          cp artifacts/Updater-darwin-arm64-dmg/*.dmg \
             release/Updater-darwin-arm64-dmg.dmg
-          cp artifacts/macos-x64/**/*.dmg \
+          cp artifacts/Updater-darwin-x64-dmg/*.dmg \
             release/Updater-darwin-x64-dmg.dmg
 
-          cp artifacts/ios/**/*.ipa \
-            release/Updater-ios-arm64-ipa.ipa
+          # Linux
+          zip -r release/Updater-linux-x64-bin.zip artifacts/Updater-linux-x64-bin
+          zip -r release/Updater-linux-arm64-bin.zip artifacts/Updater-linux-arm64-bin
 
-          zip -r release/Updater-linux-x64-bin.zip artifacts/linux-x64
-          zip -r release/Updater-linux-arm64-bin.zip artifacts/linux-arm64
-          zip -r release/Updater-windows-x64-exe.zip artifacts/windows
+          # Windows
+          zip -r release/Updater-windows-x64-exe.zip artifacts/Updater-windows-x64-exe
 
           ls -lh release
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Release ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
           files: release/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
