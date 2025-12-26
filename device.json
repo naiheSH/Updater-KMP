@@ -195,6 +195,7 @@
         { "deviceName": "REDMI Note 15 Pro+", "deviceCodeName": "flourite", "deviceCode": "PR" },
         { "deviceName": "Xiaomi Pad 8", "deviceCodeName": "yupei", "deviceCode": "PZ" },
         { "deviceName": "Xiaomi Pad 8 Pro", "deviceCodeName": "piano", "deviceCode": "PY" }
+        { "deviceName": "Xiaomi 17 Ultra", "deviceCodeName": "nezha", "deviceCode": "PA" }
     ],
-    "version": "1.0.8"
+    "version": "naihe-1.0.9"
 }
