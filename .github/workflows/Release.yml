@@ -1,0 +1,206 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+  packages: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ macos-latest, ubuntu-latest, ubuntu-24.04-arm, windows-latest ]
+        include:
+          - os: macos-latest
+            platform: macos arm64
+            build-command: ./gradlew packageDmgNativeReleaseMacosArm64
+            artifact-path: composeApp/build/compose/binaries/main/native-macosArm64-release-dmg
+            artifact-name: Updater-darwin-arm64-dmg.dmg
+            jdk-distribution: zulu
+          - os: macos-latest
+            platform: macos x64
+            build-command: ./gradlew packageDmgNativeReleaseMacosX64
+            artifact-path: composeApp/build/compose/binaries/main/native-macosX64-release-dmg
+            artifact-name: Updater-darwin-x64-dmg.dmg
+            jdk-distribution: zulu
+          - os: macos-latest
+            platform: ios arm64
+            build-command: ./gradlew iosArm64ReleaseIpa
+            artifact-path: composeApp/build/XCFrameworks/release
+            artifact-name: Updater-ios-arm64-ipa.ipa
+            jdk-distribution: zulu
+          - os: ubuntu-latest
+            platform: linux x64
+            platformEx: android aarch64
+            build-command: ./gradlew createReleaseDistributable
+            build-commandEx: ./gradlew assembleDebug && ./gradlew assembleRelease
+            artifact-path: composeApp/build/compose/binaries/main-release/app
+            artifact-pathEx: composeApp/build/outputs/apk/release
+            artifact-name: Updater-linux-x64-bin.zip
+            artifact-nameEx: Updater-android-universal-apk.apk
+            jdk-distribution: zulu
+          - os: ubuntu-24.04-arm
+            platform: linux arm64
+            build-command: ./gradlew createReleaseDistributable
+            artifact-path: composeApp/build/compose/binaries/main-release/app
+            artifact-name: Updater-linux-arm64-bin.zip
+            jdk-distribution: zulu
+          - os: windows-latest
+            platform: windows x64
+            build-command: ./gradlew createReleaseDistributable
+            artifact-path: composeApp/build/compose/binaries/main-release/app
+            artifact-name: Updater-windows-x64-exe.zip
+            jdk-distribution: zulu
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ matrix.jdk-distribution }}
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Decode android signing key
+        if: matrix.platformEx == 'android aarch64'
+        run: echo ${{ secrets.SIGNING_KEY }} | base64 -d > keystore.jks
+
+      - name: Build ${{ matrix.platform }} platform
+        run: ${{ matrix.build-command }}
+
+      - name: Build ${{ matrix.platformEx }} platform
+        if: matrix.platformEx == 'android aarch64'
+        run: ${{ matrix.build-commandEx }}
+        env:
+          KEYSTORE_PATH: "../keystore.jks"
+          KEYSTORE_PASS: ${{ secrets.KEY_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Upload Updater ${{ matrix.platform }} artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+
+      - name: Upload Updater ${{ matrix.platformEx }} artifact
+        if: matrix.platformEx == 'android aarch64'
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.artifact-nameEx }}
+          path: ${{ matrix.artifact-pathEx }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Get version from gradle
+        run: |
+          VERSION=$(grep -o 'val verName = "[^"]*"' composeApp/build.gradle.kts | sed 's/val verName = "\([^"]*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "RELEASE_TAG=v$VERSION" >> $GITHUB_ENV
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: ./artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la ./artifacts
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          release_name: Release ${{ env.VERSION }}
+          draft: false
+          prerelease: false
+
+      - name: Upload macOS arm64 DMG
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/Updater-darwin-arm64-dmg.dmg
+          asset_name: Updater-darwin-arm64-dmg.dmg
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS x64 DMG
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/Updater-darwin-x64-dmg.dmg
+          asset_name: Updater-darwin-x64-dmg.dmg
+          asset_content_type: application/octet-stream
+
+      - name: Upload iOS IPA
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/Updater-ios-arm64-ipa.ipa
+          asset_name: Updater-ios-arm64-ipa.ipa
+          asset_content_type: application/octet-stream
+
+      - name: Upload Linux x64 ZIP
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/Updater-linux-x64-bin.zip
+          asset_name: Updater-linux-x64-bin.zip
+          asset_content_type: application/zip
+
+      - name: Upload Linux arm64 ZIP
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/Updater-linux-arm64-bin.zip
+          asset_name: Updater-linux-arm64-bin.zip
+          asset_content_type: application/zip
+
+      - name: Upload Windows x64 ZIP
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/Updater-windows-x64-exe.zip
+          asset_name: Updater-windows-x64-exe.zip
+          asset_content_type: application/zip
+
+      - name: Upload Android APK
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/Updater-android-universal-apk.apk
+          asset_name: Updater-android-universal-apk.apk
+          asset_content_type: application/vnd.android.package-archive
