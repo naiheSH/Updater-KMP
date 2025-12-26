@@ -197,5 +197,5 @@
         { "deviceName": "Xiaomi Pad 8 Pro", "deviceCodeName": "piano", "deviceCode": "PY" }
         { "deviceName": "Xiaomi 17 Ultra", "deviceCodeName": "nezha", "deviceCode": "PA" }
     ],
-    "version": "naihe-1.0.9"
+    "version": "1.0.9"
 }
